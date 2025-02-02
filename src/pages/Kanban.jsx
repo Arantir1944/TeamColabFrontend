@@ -33,16 +33,22 @@ export default function Kanban() {
 
     const handleCreateTask = async () => {
         try {
-            const response = await axios.post("http://localhost:5000/api/tasks/create", newTask, {
-                headers: { Authorization: getToken() },  // ✅ NO 'Bearer '
+            const response = await axios.post("http://localhost:5000/api/tasks/create", {
+                title: newTask.title,
+                description: newTask.description,
+                boardId: 1,  // ✅ Make sure this is included
+            }, {
+                headers: { Authorization: getToken() },  // ✅ No 'Bearer'
             });
 
+            console.log("✅ Task Created:", response.data);
             setTasks([...tasks, response.data.task]);
             handleClose();
         } catch (error) {
-            console.error("Error creating task:", error.response?.data || error.message);
+            console.error("❌ Error creating task:", error.response?.data || error.message);
         }
     };
+
 
     return (
         <Container>
