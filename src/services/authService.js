@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/auth"; // Backend URL
+const API_URL = "http://localhost:5000/api/auth";
 
 export const login = async (email, password) => {
     const response = await axios.post(`${API_URL}/login`, { email, password });
@@ -10,16 +10,7 @@ export const login = async (email, password) => {
 
 export const logout = () => {
     localStorage.removeItem("token");
+    window.location.href = "/login";
 };
 
-export const getCurrentUser = () => {
-    const token = localStorage.getItem("token");
-    if (!token) return null;
-
-    try {
-        const payload = JSON.parse(atob(token.split(".")[1])); // Decode JWT
-        return payload;
-    } catch (error) {
-        return null;
-    }
-};
+export const getToken = () => localStorage.getItem("token");
