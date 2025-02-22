@@ -4,7 +4,10 @@ const API_URL = "http://localhost:5000/api/auth";
 
 export const login = async (email, password) => {
     const response = await axios.post(`${API_URL}/login`, { email, password });
-    localStorage.setItem("token", response.data.token);
+    // Ensure the token has the "Bearer " prefix
+    const token = response.data.token;
+    const formattedToken = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    localStorage.setItem("token", formattedToken);
     return response.data;
 };
 

@@ -1,23 +1,26 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../services/authService";
-import { Container, TextField, Button, Typography, Box, Paper } from "@mui/material";
+import { Container, TextField, Button, Typography, Box, Paper, CircularProgress } from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 
 export default function Login() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError("");
+        setIsSubmitting(true);
         try {
             await login(email, password);
             navigate("/dashboard");
         } catch (error) {
             setError("Invalid email or password.");
+            setIsSubmitting(false);
         }
     };
 
@@ -32,9 +35,42 @@ export default function Login() {
                 </Typography>
                 {error && <Typography color="error" align="center">{error}</Typography>}
                 <form onSubmit={handleSubmit}>
-                    <TextField fullWidth label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} margin="normal" required />
-                    <TextField fullWidth label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} margin="normal" required />
-                    <Button type="submit" variant="contained" color="primary" fullWidth sx={{ mt: 2 }}>Login</Button>
+                    <TextField
+                        fullWidth
+                        label="Email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        margin="normal"
+                        required
+                    />
+                    <TextField
+                        fullWidth
+                        label="Password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        margin="normal"
+                        required
+                    />
+                    <Box sx={{ mt: 2, position: "relative" }}>
+                        <Button type="submit" variant="contained" color="primary" fullWidth disabled={isSubmitting}>
+                            Login
+                        </Button>
+                        {isSubmitting && (
+                            <CircularProgress
+                                size={24}
+                                sx={{
+                                    color: "primary.main",
+                                    position: "absolute",
+                                    top: "50%",
+                                    left: "50%",
+                                    marginTop: "-12px",
+                                    marginLeft: "-12px",
+                                }}
+                            />
+                        )}
+                    </Box>
                 </form>
             </Paper>
         </Container>
