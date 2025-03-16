@@ -1,67 +1,166 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { Container, Typography, Button, Paper, Box, Modal, TextField } from "@mui/material";
+import {
+    Container, Typography, Button, Paper, Box, Modal, TextField,
+    MenuItem, Select, Alert, IconButton
+} from "@mui/material";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { getToken } from "../services/authService";
+import DeleteIcon from "@mui/icons-material/Delete";
 
-// Define initial empty columns for our Kanban board
 const initialColumns = {
-    "todo": {
-        name: "To Do",
-        items: [],
-    },
-    "in-progress": {
-        name: "In Progress",
-        items: [],
-    },
-    "done": {
-        name: "Done",
-        items: [],
-    },
+    "todo": { name: "To Do", items: [] },
+    "in-progress": { name: "In Progress", items: [] },
+    "done": { name: "Done", items: [] },
 };
 
 export default function Kanban() {
     const [columns, setColumns] = useState(initialColumns);
-    const [open, setOpen] = useState(false);
+    const [openTaskModal, setOpenTaskModal] = useState(false);
     const [newTask, setNewTask] = useState({ title: "", description: "" });
+    const [boards, setBoards] = useState([]);
+    const [selectedBoard, setSelectedBoard] = useState(null);
+    const [newBoard, setNewBoard] = useState("");
+    const [boardModalOpen, setBoardModalOpen] = useState(false);
+    const [errorMessage, setErrorMessage] = useState("");
 
-    // Helper: ensure our token includes the "Bearer " prefix
     const getFormattedToken = () => {
         const token = getToken();
         return token ? (token.startsWith("Bearer ") ? token : `Bearer ${token}`) : "";
     };
 
-    // Fetch tasks from backend and distribute them into columns based on task.status
     useEffect(() => {
-        const fetchTasks = async () => {
+        const fetchBoards = async () => {
             try {
-                const response = await axios.get("http://localhost:5000/api/tasks/1", {
+                const response = await axios.get("http://localhost:5000/api/boards", {
                     headers: { Authorization: getFormattedToken() },
                 });
-                // Assuming each task has a 'status' property: "todo", "in-progress", or "done"
-                const tasks = response.data.tasks;
-                const newColumns = {
-                    "todo": { name: "To Do", items: tasks.filter(task => task.status === "todo") },
-                    "in-progress": { name: "In Progress", items: tasks.filter(task => task.status === "in-progress") },
-                    "done": { name: "Done", items: tasks.filter(task => task.status === "done") },
-                };
-                setColumns(newColumns);
+                setBoards(response.data.boards);
+                if (response.data.boards.length > 0) {
+                    setSelectedBoard(response.data.boards[0].id);
+                    fetchTasks(response.data.boards[0].id);
+                }
             } catch (error) {
-                console.error("Error fetching tasks:", error.response?.data || error.message);
+                console.error("Error fetching boards:", error.response?.data || error.message);
             }
         };
-        fetchTasks();
+        fetchBoards();
     }, []);
 
-    // Handle drag-and-drop events
+    // When fetching tasks, map statuses to match the allowed strings ("To Do", etc.)
+    const fetchTasks = async (boardId) => {
+        try {
+            const response = await axios.get(`http://localhost:5000/api/tasks/${boardId}`, {
+                headers: { Authorization: getFormattedToken() },
+            });
+            const tasks = response.data.tasks;
+            const newColumns = {
+                "todo": { name: "To Do", items: tasks.filter(task => task.status === "To Do") },
+                "in-progress": { name: "In Progress", items: tasks.filter(task => task.status === "In Progress") },
+                "done": { name: "Done", items: tasks.filter(task => task.status === "Done") },
+            };
+            setColumns(newColumns);
+        } catch (error) {
+            console.error("Error fetching tasks:", error.response?.data || error.message);
+        }
+    };
+
+    const handleBoardChange = (event) => {
+        setSelectedBoard(event.target.value);
+        fetchTasks(event.target.value);
+    };
+
+    const handleCreateBoard = async () => {
+        if (!newBoard.trim()) return;
+        setErrorMessage("");
+        try {
+            const token = getToken();
+            const decodedToken = JSON.parse(atob(token.split(".")[1]));
+            const teamId = decodedToken.teamId;
+
+            const response = await axios.post(
+                "http://localhost:5000/api/boards/create",
+                { name: newBoard, teamId },
+                { headers: { Authorization: getFormattedToken() } }
+            );
+
+            setBoards(prevBoards => [...prevBoards, response.data.board]);
+            setSelectedBoard(response.data.board.id);
+            fetchTasks(response.data.board.id);
+            setBoardModalOpen(false);
+            setNewBoard("");
+        } catch (error) {
+            setErrorMessage(error.response?.data?.message || "Error creating board.");
+            console.error("Error creating board:", error.response?.data || error.message);
+        }
+    };
+
+    const handleDeleteBoard = async (boardId) => {
+        try {
+            await axios.delete(`http://localhost:5000/api/boards/${boardId}`, {
+                headers: { Authorization: getFormattedToken() },
+            });
+            setBoards(boards.filter(board => board.id !== boardId));
+            if (selectedBoard === boardId) {
+                setSelectedBoard(boards.length > 1 ? boards[0].id : null);
+            }
+        } catch (error) {
+            console.error("Error deleting board:", error.response?.data || error.message);
+        }
+    };
+
+    // TASK FUNCTIONS
+
+    const handleCreateTask = async () => {
+        if (!newTask.title.trim() || !selectedBoard) return;
+        try {
+            const response = await axios.post(
+                "http://localhost:5000/api/tasks/create",
+                { ...newTask, boardId: selectedBoard, status: "To Do" },
+                { headers: { Authorization: getFormattedToken() } }
+            );
+            const createdTask = response.data.task;
+            // Add the new task to the "To Do" column
+            setColumns(prev => ({
+                ...prev,
+                "todo": {
+                    ...prev["todo"],
+                    items: [...prev["todo"].items, createdTask]
+                }
+            }));
+            setNewTask({ title: "", description: "" });
+            setOpenTaskModal(false);
+        } catch (error) {
+            console.error("Error creating task:", error.response?.data || error.message);
+        }
+    };
+
+    const handleDeleteTask = async (taskId, columnId) => {
+        try {
+            await axios.delete(`http://localhost:5000/api/tasks/delete/${taskId}`, {
+                headers: { Authorization: getFormattedToken() },
+            });
+            setColumns(prev => ({
+                ...prev,
+                [columnId]: {
+                    ...prev[columnId],
+                    items: prev[columnId].items.filter(task => task.id !== taskId)
+                }
+            }));
+        } catch (error) {
+            console.error("Error deleting task:", error.response?.data || error.message);
+        }
+    };
+
+    // When dragging tasks, map droppable IDs to allowed status strings.
     const onDragEnd = async (result) => {
         if (!result.destination) return;
         const { source, destination } = result;
 
+        // If same column, just reorder tasks
         if (source.droppableId === destination.droppableId) {
-            // Reordering within the same column
             const column = columns[source.droppableId];
-            const copiedItems = [...column.items];
+            const copiedItems = Array.from(column.items);
             const [removed] = copiedItems.splice(source.index, 1);
             copiedItems.splice(destination.index, 0, removed);
             setColumns({
@@ -72,14 +171,25 @@ export default function Kanban() {
                 },
             });
         } else {
-            // Moving task between columns; update task status accordingly
+            const statusMapping = {
+                "todo": "To Do",
+                "in-progress": "In Progress",
+                "done": "Done"
+            };
+
+            const newStatus = statusMapping[destination.droppableId];
+            if (!newStatus) {
+                console.error("Invalid status mapping");
+                return;
+            }
             const sourceColumn = columns[source.droppableId];
             const destColumn = columns[destination.droppableId];
-            const sourceItems = [...sourceColumn.items];
-            const destItems = [...destColumn.items];
+            const sourceItems = Array.from(sourceColumn.items);
+            const destItems = Array.from(destColumn.items);
             const [removed] = sourceItems.splice(source.index, 1);
-            // Update task status to new column id
-            removed.status = destination.droppableId;
+
+            // Update removed task's status using mapped value
+            removed.status = newStatus;
             destItems.splice(destination.index, 0, removed);
             setColumns({
                 ...columns,
@@ -92,11 +202,11 @@ export default function Kanban() {
                     items: destItems,
                 },
             });
-            // Update task status in backend
+            // Persist the change to the backend
             try {
                 await axios.put(
-                    `http://localhost:5000/api/tasks/${removed.id}`,
-                    { status: destination.droppableId },
+                    `http://localhost:5000/api/tasks/update/${removed.id}`,
+                    { status: newStatus },
                     { headers: { Authorization: getFormattedToken() } }
                 );
             } catch (error) {
@@ -105,74 +215,65 @@ export default function Kanban() {
         }
     };
 
-    // Modal controls for creating a new task
-    const handleOpen = () => setOpen(true);
-    const handleClose = () => setOpen(false);
-    const handleInputChange = (e) => {
-        setNewTask({ ...newTask, [e.target.name]: e.target.value });
-    };
-
-    const handleCreateTask = async () => {
-        try {
-            // Create task with default status "todo"
-            const response = await axios.post(
-                "http://localhost:5000/api/tasks/create",
-                { title: newTask.title, description: newTask.description, boardId: 1, status: "todo" },
-                { headers: { Authorization: getFormattedToken() } }
-            );
-            const createdTask = response.data.task;
-            // Add the new task to the "To Do" column
-            setColumns(prev => ({
-                ...prev,
-                "todo": {
-                    ...prev["todo"],
-                    items: [...prev["todo"].items, createdTask],
-                },
-            }));
-            handleClose();
-        } catch (error) {
-            console.error("Error creating task:", error.response?.data || error.message);
-        }
-    };
-
     return (
         <Container sx={{ mt: 4 }}>
             <Typography variant="h3" gutterBottom>Kanban Board</Typography>
-            <Button variant="contained" color="primary" onClick={handleOpen} sx={{ mb: 2 }}>
-                + New Task
-            </Button>
+            <Box display="flex" justifyContent="space-between" sx={{ mb: 2 }}>
+                <Select value={selectedBoard || ""} onChange={handleBoardChange} displayEmpty>
+                    <MenuItem value="" disabled>Select a Board</MenuItem>
+                    {boards.map(board => (
+                        <MenuItem key={board.id} value={board.id}>
+                            {board.name}
+                            <IconButton onClick={() => handleDeleteBoard(board.id)}>
+                                <DeleteIcon color="error" />
+                            </IconButton>
+                        </MenuItem>
+                    ))}
+                </Select>
+                <Box>
+                    <Button variant="contained" color="primary" onClick={() => setOpenTaskModal(true)} sx={{ mr: 2 }}>
+                        + New Task
+                    </Button>
+                    <Button variant="contained" color="primary" onClick={() => setBoardModalOpen(true)}>
+                        + New Board
+                    </Button>
+                </Box>
+            </Box>
+
+            {/* TASK DRAG & DROP */}
             <DragDropContext onDragEnd={onDragEnd}>
-                <Box display="flex" justifyContent="space-between">
+                <Box display="flex" gap={2}>
                     {Object.entries(columns).map(([columnId, column]) => (
-                        <Box key={columnId} sx={{ width: "32%" }}>
-                            <Typography variant="h5" align="center" sx={{ mb: 2 }}>{column.name}</Typography>
+                        <Paper key={columnId} sx={{ flex: 1, p: 2 }}>
+                            <Typography variant="h5" sx={{ mb: 1 }}>{column.name}</Typography>
                             <Droppable droppableId={columnId}>
                                 {(provided, snapshot) => (
                                     <Box
                                         ref={provided.innerRef}
                                         {...provided.droppableProps}
-                                        sx={{
-                                            background: snapshot.isDraggingOver ? "#f4f4f4" : "#e2e2e2",
-                                            padding: 2,
-                                            minHeight: 500,
-                                            borderRadius: 2,
-                                        }}
+                                        minHeight={100}
+                                        sx={{ background: snapshot.isDraggingOver ? "#f0f0f0" : "inherit", p: 1 }}
                                     >
-                                        {column.items.map((item, index) => (
-                                            <Draggable key={item.id.toString()} draggableId={item.id.toString()} index={index}>
+                                        {column.items.map((task, index) => (
+                                            <Draggable key={task.id} draggableId={String(task.id)} index={index}>
                                                 {(provided, snapshot) => (
                                                     <Paper
                                                         ref={provided.innerRef}
                                                         {...provided.draggableProps}
                                                         {...provided.dragHandleProps}
                                                         sx={{
-                                                            p: 2,
-                                                            mb: 2,
-                                                            background: snapshot.isDragging ? "#cfcfcf" : "white",
+                                                            p: 1, mb: 1,
+                                                            background: snapshot.isDragging ? "#e0e0e0" : "white",
+                                                            display: "flex", justifyContent: "space-between", alignItems: "center"
                                                         }}
                                                     >
-                                                        <Typography variant="h6">{item.title}</Typography>
-                                                        <Typography variant="body2">{item.description}</Typography>
+                                                        <Box>
+                                                            <Typography variant="subtitle1">{task.title}</Typography>
+                                                            <Typography variant="body2">{task.description}</Typography>
+                                                        </Box>
+                                                        <IconButton onClick={() => handleDeleteTask(task.id, columnId)}>
+                                                            <DeleteIcon color="error" />
+                                                        </IconButton>
                                                     </Paper>
                                                 )}
                                             </Draggable>
@@ -181,20 +282,70 @@ export default function Kanban() {
                                     </Box>
                                 )}
                             </Droppable>
-                        </Box>
+                        </Paper>
                     ))}
                 </Box>
             </DragDropContext>
-            <Modal open={open} onClose={handleClose}>
+
+            {/* New Board Modal */}
+            <Modal open={boardModalOpen} onClose={() => setBoardModalOpen(false)}>
+                <Box sx={{
+                    position: "absolute", top: "50%", left: "50%",
+                    transform: "translate(-50%, -50%)", width: 400,
+                    bgcolor: "white", p: 4, borderRadius: 2
+                }}>
+                    <Typography variant="h5">Create New Board</Typography>
+                    {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+                    <TextField
+                        fullWidth
+                        label="Board Name"
+                        value={newBoard}
+                        onChange={(e) => setNewBoard(e.target.value)}
+                        margin="normal"
+                    />
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleCreateBoard}
+                        sx={{ mt: 2 }}
+                        disabled={!newBoard.trim()}
+                    >
+                        Create
+                    </Button>
+                </Box>
+            </Modal>
+
+            {/* New Task Modal */}
+            <Modal open={openTaskModal} onClose={() => setOpenTaskModal(false)}>
                 <Box sx={{
                     position: "absolute", top: "50%", left: "50%",
                     transform: "translate(-50%, -50%)", width: 400,
                     bgcolor: "white", p: 4, borderRadius: 2
                 }}>
                     <Typography variant="h5">Create New Task</Typography>
-                    <TextField fullWidth label="Title" name="title" value={newTask.title} onChange={handleInputChange} margin="normal" />
-                    <TextField fullWidth label="Description" name="description" value={newTask.description} onChange={handleInputChange} margin="normal" />
-                    <Button variant="contained" color="primary" onClick={handleCreateTask} sx={{ mt: 2 }}>Create</Button>
+                    <TextField
+                        fullWidth
+                        label="Task Title"
+                        value={newTask.title}
+                        onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                        margin="normal"
+                    />
+                    <TextField
+                        fullWidth
+                        label="Task Description"
+                        value={newTask.description}
+                        onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                        margin="normal"
+                    />
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleCreateTask}
+                        sx={{ mt: 2 }}
+                        disabled={!newTask.title.trim()}
+                    >
+                        Create Task
+                    </Button>
                 </Box>
             </Modal>
         </Container>
