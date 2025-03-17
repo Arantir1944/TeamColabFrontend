@@ -1,7 +1,16 @@
-import { useState } from "react";
+// src/pages/Login.jsx
+import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../services/authService";
-import { Container, TextField, Button, Typography, Box, Paper, CircularProgress } from "@mui/material";
+import { AuthContext } from "../contexts/AuthContext"; // Use our auth context
+import {
+    Container,
+    TextField,
+    Button,
+    Typography,
+    Box,
+    Paper,
+    CircularProgress,
+} from "@mui/material";
 import LockIcon from "@mui/icons-material/Lock";
 
 export default function Login() {
@@ -10,13 +19,14 @@ export default function Login() {
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigate = useNavigate();
+    const { login } = useContext(AuthContext); // Get login from our auth context
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError("");
         setIsSubmitting(true);
         try {
-            await login(email, password);
+            await login(email, password); // Call the context's login function
             navigate("/dashboard");
         } catch (error) {
             setError("Invalid email or password.");
@@ -33,7 +43,11 @@ export default function Login() {
                 <Typography variant="h5" align="center" gutterBottom>
                     Sign In
                 </Typography>
-                {error && <Typography color="error" align="center">{error}</Typography>}
+                {error && (
+                    <Typography color="error" align="center">
+                        {error}
+                    </Typography>
+                )}
                 <form onSubmit={handleSubmit}>
                     <TextField
                         fullWidth
@@ -54,7 +68,13 @@ export default function Login() {
                         required
                     />
                     <Box sx={{ mt: 2, position: "relative" }}>
-                        <Button type="submit" variant="contained" color="primary" fullWidth disabled={isSubmitting}>
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            color="primary"
+                            fullWidth
+                            disabled={isSubmitting}
+                        >
                             Login
                         </Button>
                         {isSubmitting && (

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// src/components/NavBar.jsx
+import React, { useContext, useState } from "react";
 import {
     AppBar,
     Box,
@@ -13,27 +14,19 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { Link, useNavigate } from "react-router-dom";
-import { logout, getUserFromToken } from "../services/authService";
+import { AuthContext } from "../contexts/AuthContext"; // Import the auth context
 
 const NavBar = () => {
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [user, setUser] = useState(null);
     const navigate = useNavigate();
-
-    // Check for a logged-in user when the component mounts.
-    useEffect(() => {
-        const currentUser = getUserFromToken();
-        setUser(currentUser);
-    }, []);
+    const { user, logout } = useContext(AuthContext); // Get user and logout from context
 
     const handleDrawerToggle = () => {
         setMobileOpen(!mobileOpen);
     };
 
-    // Handle logout: clear token, update state, and redirect.
     const handleLogout = () => {
         logout();
-        setUser(null);
         navigate("/login");
     };
 

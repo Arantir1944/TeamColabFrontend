@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+// src/pages/Register.jsx
+import React, { useState, useEffect } from "react";
 import {
     Container,
     Typography,
     TextField,
     Button,
     Paper,
-    MenuItem
+    MenuItem,
 } from "@mui/material";
-import { registerUser } from "../services/authService";
+import { registerUser, getToken } from "../services/authService";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 export default function Register() {
     const navigate = useNavigate();
@@ -17,10 +19,28 @@ export default function Register() {
         lastName: "",
         email: "",
         password: "",
-        role: "Employee"
+        role: "Employee",
+        teamId: "",
     });
+    const [teams, setTeams] = useState([]);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
+
+    // Fetch teams from the protected endpoint
+    const fetchTeams = async () => {
+        try {
+            const response = await axios.get("http://localhost:5000/api/teams", {
+                headers: { Authorization: getToken() },
+            });
+            setTeams(response.data.teams);
+        } catch (error) {
+            console.error("Error fetching teams", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchTeams();
+    }, []);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -32,7 +52,6 @@ export default function Register() {
             const data = await registerUser(formData);
             setSuccess(data.message);
             setError(null);
-            // Optionally, redirect to dashboard or clear the form
             navigate("/dashboard");
         } catch (err) {
             console.error(err);
@@ -95,6 +114,22 @@ export default function Register() {
                         <MenuItem value="Manager">Manager</MenuItem>
                         <MenuItem value="Team Leader">Team Leader</MenuItem>
                         <MenuItem value="Employee">Employee</MenuItem>
+                    </TextField>
+                    {/* Dropdown for selecting a team */}
+                    <TextField
+                        label="Team"
+                        name="teamId"
+                        select
+                        value={formData.teamId}
+                        onChange={handleChange}
+                        fullWidth
+                        margin="normal"
+                    >
+                        {teams.map((team) => (
+                            <MenuItem key={team.id} value={team.id}>
+                                {team.name}
+                            </MenuItem>
+                        ))}
                     </TextField>
                     <Button
                         type="submit"

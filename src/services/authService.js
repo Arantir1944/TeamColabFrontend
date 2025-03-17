@@ -15,7 +15,7 @@ export const login = async (email, password) => {
 
 export const logout = () => {
     localStorage.removeItem("token");
-    window.location.href = "/login";
+    // Removed window.location.href so we can update state without a refresh.
 };
 
 export const getToken = () => localStorage.getItem("token");
@@ -28,13 +28,13 @@ export const getUserFromToken = () => {
     const pureToken = token.startsWith("Bearer ") ? token.split(" ")[1] : token;
 
     try {
-        return jwt_decode(pureToken); // <== decode the token
+        return jwt_decode(pureToken); // decode the token
     } catch (error) {
         console.error("Invalid token", error);
         return null;
     }
 };
-// In authService.js
+
 export const registerUser = async (userData) => {
     const token = getToken();
     const response = await axios.post(`${API_URL}/register`, userData, {
@@ -42,4 +42,3 @@ export const registerUser = async (userData) => {
     });
     return response.data;
 };
-

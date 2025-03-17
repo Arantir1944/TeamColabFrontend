@@ -1,18 +1,18 @@
+// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Kanban from "./pages/Kanban";
 import Register from "./pages/Register";
+import Wiki from "./pages/Wiki";
 import ProtectedRoute from "./components/ProtectedRoute";
-import NavBar from "./components/NavBar"; // <-- Import your NavBar
+import NavBar from "./components/NavBar";
+import { AuthProvider } from "./contexts/AuthContext"; // Import the provider
 
 function App() {
   return (
-    <>
-      {/* Always display NavBar */}
+    <AuthProvider>
       <NavBar />
-
-      {/* Define your routes */}
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
@@ -39,9 +39,17 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/wiki"
+          element={
+            <ProtectedRoute>
+              <Wiki />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
-    </>
+    </AuthProvider>
   );
 }
 
