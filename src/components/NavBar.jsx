@@ -1,25 +1,19 @@
 // src/components/NavBar.jsx
 import React, { useContext, useState } from "react";
 import {
-    AppBar,
-    Box,
-    Toolbar,
-    IconButton,
-    Typography,
-    Button,
-    Drawer,
-    List,
-    ListItem,
-    ListItemText,
+    AppBar, Box, Toolbar,
+    IconButton, Typography,
+    Button, Drawer,
+    List, ListItem, ListItemText
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { Link, useNavigate } from "react-router-dom";
-import { AuthContext } from "../contexts/AuthContext"; // Import the auth context
+import { AuthContext } from "../contexts/AuthContext";
 
 const NavBar = () => {
     const [mobileOpen, setMobileOpen] = useState(false);
     const navigate = useNavigate();
-    const { user, logout } = useContext(AuthContext); // Get user and logout from context
+    const { user, logout } = useContext(AuthContext);
 
     const handleDrawerToggle = () => {
         setMobileOpen(!mobileOpen);
@@ -30,12 +24,12 @@ const NavBar = () => {
         navigate("/login");
     };
 
-    // Define your nav items.
     const navItems = [
         { label: "Dashboard", path: "/dashboard" },
         { label: "Kanban", path: "/kanban" },
         { label: "Wiki", path: "/wiki" },
-        { label: "Debug", path: "/debug" },
+        { label: "Chat", path: "/chat" },  // added
+        { label: "Debug", path: "/debug" }
     ];
 
     return (
@@ -62,7 +56,7 @@ const NavBar = () => {
                         Team Colab
                     </Typography>
 
-                    {/* Desktop navigation */}
+                    {/* Desktop nav */}
                     <Box sx={{ display: { xs: "none", sm: "block" } }}>
                         {navItems.map((item) => (
                             <Button
@@ -99,7 +93,7 @@ const NavBar = () => {
                 </Toolbar>
             </AppBar>
 
-            {/* Mobile Drawer Navigation */}
+            {/* Mobile drawer */}
             <Drawer
                 anchor="left"
                 open={mobileOpen}
