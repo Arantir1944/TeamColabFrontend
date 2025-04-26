@@ -1,21 +1,37 @@
 // src/components/chat/ConversationList.jsx
 import React from "react";
-export default function ConversationList({ convos, activeId, onSelect }) {
+import {
+    List,
+    ListItemButton,
+    ListItemText,
+    Badge
+} from "@mui/material";
+
+export default function ConversationList({
+    convos,
+    activeId,
+    onSelect,
+    unreadCounts = {}
+}) {
     return (
-        <div style={{ width: 250, borderRight: "1px solid #ccc" }}>
+        <List>
             {convos.map(c => (
-                <div
+                <ListItemButton
                     key={c.id}
+                    selected={c.id === activeId}
                     onClick={() => onSelect(c)}
-                    style={{
-                        padding: "8px",
-                        cursor: "pointer",
-                        background: c.id === activeId ? "#eee" : "transparent"
-                    }}
                 >
-                    {c.name || c.Users.map(u => u.firstName).join(", ")}
-                </div>
+                    <Badge
+                        badgeContent={unreadCounts[c.id]}
+                        color="error"
+                        invisible={!unreadCounts[c.id]}
+                    >
+                        <ListItemText
+                            primary={c.name || c.Users.map(u => u.firstName).join(", ")}
+                        />
+                    </Badge>
+                </ListItemButton>
             ))}
-        </div>
+        </List>
     );
 }

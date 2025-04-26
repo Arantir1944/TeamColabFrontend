@@ -1,6 +1,10 @@
 // src/components/chat/MessageInput.jsx
 import React, { useState } from "react";
-import { TextField, IconButton } from "@mui/material";
+import {
+    Box,
+    TextField,
+    IconButton
+} from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 
 export default function MessageInput({ onSend }) {
@@ -10,17 +14,26 @@ export default function MessageInput({ onSend }) {
         onSend(text.trim());
         setText("");
     };
+
     return (
-        <div style={{ display: "flex", padding: 8 }}>
+        <Box display="flex">
             <TextField
                 fullWidth
                 variant="outlined"
                 size="small"
+                placeholder="Type a message..."
                 value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && send()}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send()}
             />
-            <IconButton onClick={send}><SendIcon /></IconButton>
-        </div>
+            <IconButton
+                color="primary"
+                onClick={send}
+                sx={{ ml: 1 }}
+                aria-label="send message"
+            >
+                <SendIcon />
+            </IconButton>
+        </Box>
     );
 }
