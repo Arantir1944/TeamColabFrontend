@@ -2,7 +2,7 @@
 import axios from "axios";
 import { getToken } from "./authService";  // :contentReference[oaicite:2]{index=2}&#8203;:contentReference[oaicite:3]{index=3}
 
-const API = "/api/chat";
+const API = "16.170.210.30:5000/api/chat";
 
 function authHeaders() {
     return { Authorization: getToken() };

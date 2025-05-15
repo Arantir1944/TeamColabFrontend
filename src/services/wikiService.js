@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getToken } from "./authService";
 
-const API_URL = "/api/wiki";
+const API_URL = "16.170.210.30:5000/api/wiki";
 
 export const fetchCategories = async () => {
     const token = getToken();
