@@ -2,7 +2,7 @@
 import axios from "axios";
 import jwt_decode from "jwt-decode";
 
-const API_URL = "http://16.170.210.30:5000/api/auth";
+const API_URL = "http://16.170.210.30:5001/api/auth";
 
 export const login = async (email, password) => {
     const response = await axios.post(`${API_URL}/login`, { email, password });
