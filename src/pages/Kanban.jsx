@@ -32,7 +32,7 @@ export default function Kanban() {
     useEffect(() => {
         const fetchBoards = async () => {
             try {
-                const response = await axios.get("http://localhost:5000/api/boards", {
+                const response = await axios.get("https://16.170.210.30:5001/api/boards", {
                     headers: { Authorization: getFormattedToken() },
                 });
                 setBoards(response.data.boards);
@@ -50,7 +50,7 @@ export default function Kanban() {
     // When fetching tasks, map statuses to match the allowed strings ("To Do", etc.)
     const fetchTasks = async (boardId) => {
         try {
-            const response = await axios.get(`http://localhost:5000/api/tasks/${boardId}`, {
+            const response = await axios.get(`https://16.170.210.30:5001/api/tasks/${boardId}`, {
                 headers: { Authorization: getFormattedToken() },
             });
             const tasks = response.data.tasks;
@@ -79,7 +79,7 @@ export default function Kanban() {
             const teamId = decodedToken.teamId;
 
             const response = await axios.post(
-                "http://localhost:5000/api/boards/create",
+                "https://16.170.210.30:5001/api/boards/create",
                 { name: newBoard, teamId },
                 { headers: { Authorization: getFormattedToken() } }
             );
@@ -97,7 +97,7 @@ export default function Kanban() {
 
     const handleDeleteBoard = async (boardId) => {
         try {
-            await axios.delete(`http://localhost:5000/api/boards/${boardId}`, {
+            await axios.delete(`https://16.170.210.30:5001/api/boards/${boardId}`, {
                 headers: { Authorization: getFormattedToken() },
             });
             setBoards(boards.filter(board => board.id !== boardId));
@@ -115,7 +115,7 @@ export default function Kanban() {
         if (!newTask.title.trim() || !selectedBoard) return;
         try {
             const response = await axios.post(
-                "http://localhost:5000/api/tasks/create",
+                "https://16.170.210.30:5001/api/tasks/create",
                 { ...newTask, boardId: selectedBoard, status: "To Do" },
                 { headers: { Authorization: getFormattedToken() } }
             );
@@ -137,7 +137,7 @@ export default function Kanban() {
 
     const handleDeleteTask = async (taskId, columnId) => {
         try {
-            await axios.delete(`http://localhost:5000/api/tasks/delete/${taskId}`, {
+            await axios.delete(`https://16.170.210.30:5001/api/tasks/delete/${taskId}`, {
                 headers: { Authorization: getFormattedToken() },
             });
             setColumns(prev => ({
@@ -205,7 +205,7 @@ export default function Kanban() {
             // Persist the change to the backend
             try {
                 await axios.put(
-                    `http://localhost:5000/api/tasks/update/${removed.id}`,
+                    `https://16.170.210.30:5001/api/tasks/update/${removed.id}`,
                     { status: newStatus },
                     { headers: { Authorization: getFormattedToken() } }
                 );

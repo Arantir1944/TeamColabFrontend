@@ -29,7 +29,7 @@ export default function Register() {
     // Fetch teams from the protected endpoint
     const fetchTeams = async () => {
         try {
-            const response = await axios.get("http://localhost:5000/api/teams", {
+            const response = await axios.get("https://16.170.210.30:5001/api/teams", {
                 headers: { Authorization: getToken() },
             });
             setTeams(response.data.teams);
