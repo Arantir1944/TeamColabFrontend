@@ -55,7 +55,6 @@ const NavBar = () => {
         { label: "Kanban", path: "/kanban" },
         { label: "Wiki", path: "/wiki" },
         { label: "Chat", path: "/chat" },
-        { label: "Debug", path: "/debug" }
     ];
 
     return (
@@ -75,7 +74,7 @@ const NavBar = () => {
                     <Typography
                         variant="h6"
                         component={Link}
-                        to="/"
+                        to="/dashboard"
                         color="inherit"
                         sx={{ textDecoration: "none", flexGrow: 1 }}
                     >

@@ -6,7 +6,9 @@ import {
     Grid,
     Paper,
     Typography,
-    Divider
+    Divider,
+    TextField,
+    Autocomplete
 } from "@mui/material";
 import ConversationList from "../components/chat/ConversationList";
 import MessageList from "../components/chat/MessageList";
@@ -15,7 +17,9 @@ import CallButton from "../components/call/CallButton";
 import {
     getConversations,
     getConversation,
-    sendMessage
+    sendMessage,
+    searchUsers,
+    startDirectConversation
 } from "../services/chatService";
 import socket from "../utils/socket";
 import { AuthContext } from "../contexts/AuthContext";
@@ -25,10 +29,12 @@ export default function ChatPage() {
     const [activeConvo, setActiveConvo] = useState(null);
     const [messages, setMessages] = useState([]);
     const [unreadCounts, setUnreadCounts] = useState({});
+    const [searchResults, setSearchResults] = useState([]);
+    const [searchQuery, setSearchQuery] = useState("");
+
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
 
-    // 1) Load conversations, init unread, and join all rooms
     useEffect(() => {
         getConversations().then(list => {
             setConvos(list);
@@ -41,14 +47,35 @@ export default function ChatPage() {
         });
     }, []);
 
-    // 2) When you select a convo, clear its badge and load its messages
     const handleSelect = convo => {
         setUnreadCounts(u => ({ ...u, [convo.id]: 0 }));
         setActiveConvo(convo);
         getConversation(convo.id).then(c => setMessages(c.Messages));
     };
 
-    // 3) Listen for ALL newMessage events once
+    const handleSend = content => {
+        sendMessage({ conversationId: activeConvo.id, content })
+            .then(msg => setMessages(m => [...m, msg]));
+    };
+
+    const handleSearchChange = async (event, value) => {
+        setSearchQuery(value);
+        if (value.length >= 2) {
+            const users = await searchUsers(value);
+            setSearchResults(users);
+        } else {
+            setSearchResults([]);
+        }
+    };
+
+    const handleUserSelect = async (event, selectedUser) => {
+        if (!selectedUser) return;
+        const convo = await startDirectConversation(selectedUser.id);
+        setActiveConvo(convo);
+        setConvos(c => [...c, convo]);
+        getConversation(convo.id).then(c => setMessages(c.Messages));
+    };
+
     useEffect(() => {
         const handler = msg => {
             if (msg.conversationId === activeConvo?.id) {
@@ -61,32 +88,41 @@ export default function ChatPage() {
             }
         };
         socket.on("newMessage", handler);
-        return () => { socket.off("newMessage", handler); };
+        return () => socket.off("newMessage", handler);
     }, [activeConvo]);
 
-    // 4) Incoming call prompt
     useEffect(() => {
         const incoming = ({ callId, initiatorId, initiatorName }) => {
-            if (
-                window.confirm(`${initiatorName} is calling you. Join?`)
-            ) {
+            if (window.confirm(`${initiatorName} is calling you. Join?`)) {
                 navigate(`/call/${callId}`, { state: { initiatorId } });
             }
         };
         socket.on("incomingCall", incoming);
-        return () => { socket.off("incomingCall", incoming); };
+        return () => socket.off("incomingCall", incoming);
     }, [navigate]);
-
-    const handleSend = content => {
-        sendMessage({ conversationId: activeConvo.id, content })
-            .then(msg => setMessages(m => [...m, msg]));
-    };
 
     return (
         <Grid container sx={{ height: "100vh" }}>
             {/* Sidebar */}
             <Grid item xs={3}>
                 <Paper square sx={{ height: "100%", overflow: "auto" }}>
+                    <Box p={2}>
+                        <Autocomplete
+                            options={searchResults}
+                            getOptionLabel={(option) => `${option.firstName} ${option.lastName}`}
+                            onInputChange={handleSearchChange}
+                            onChange={handleUserSelect}
+                            renderInput={(params) => (
+                                <TextField
+                                    {...params}
+                                    label="Start a chat..."
+                                    variant="outlined"
+                                    size="small"
+                                    fullWidth
+                                />
+                            )}
+                        />
+                    </Box>
                     <ConversationList
                         convos={convos}
                         activeId={activeConvo?.id}

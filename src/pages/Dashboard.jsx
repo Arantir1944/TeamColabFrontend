@@ -49,14 +49,6 @@ export default function Dashboard() {
                             Register New User
                         </Button>
                     )}
-                    <Button
-                        variant="contained"
-                        color="secondary"
-                        onClick={logout}
-                        sx={{ mx: 1 }}
-                    >
-                        Logout
-                    </Button>
                 </Box>
             </Paper>
         </Container>
