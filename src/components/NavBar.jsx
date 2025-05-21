@@ -9,7 +9,7 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { AuthContext } from "../contexts/AuthContext";      // :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+import { AuthContext } from "../contexts/AuthContext";
 import socket from "../utils/socket";
 import { getConversations } from "../services/chatService";
 
@@ -20,7 +20,6 @@ const NavBar = () => {
     const location = useLocation();
     const { user, logout } = useContext(AuthContext);
 
-    // On mount: load convos, join each room
     useEffect(() => {
         getConversations().then(convos => {
             convos.forEach(c => socket.emit("joinConversation", c.id));
@@ -34,7 +33,6 @@ const NavBar = () => {
         return () => { socket.off("newMessage", handler); };
     }, [location.pathname]);
 
-    // Reset badge when entering /chat
     useEffect(() => {
         if (location.pathname === "/chat") {
             setUnreadCount(0);
@@ -55,6 +53,7 @@ const NavBar = () => {
         { label: "Kanban", path: "/kanban" },
         { label: "Wiki", path: "/wiki" },
         { label: "Chat", path: "/chat" },
+        { label: "My Team", path: "/my-team" },
     ];
 
     return (
@@ -81,7 +80,6 @@ const NavBar = () => {
                         Team Colab
                     </Typography>
 
-                    {/* Desktop navigation */}
                     <Box sx={{ display: { xs: "none", sm: "block" } }}>
                         {navItems.map(item => {
                             if (item.path === "/chat") {
@@ -140,7 +138,6 @@ const NavBar = () => {
                 </Toolbar>
             </AppBar>
 
-            {/* Mobile Drawer */}
             <Drawer
                 anchor="left"
                 open={mobileOpen}
