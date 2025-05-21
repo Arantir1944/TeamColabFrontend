@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { getToken } from "../services/authService";
+import {
+    Container,
+    Typography,
+    Paper,
+    Box,
+    CircularProgress,
+    List,
+    ListItem,
+    ListItemAvatar,
+    Avatar,
+    ListItemText,
+    Divider
+} from "@mui/material";
 
 export default function MyTeamPage() {
     const [team, setTeam] = useState(null);
@@ -16,28 +29,55 @@ export default function MyTeamPage() {
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) return <p>Loading...</p>;
-    if (error) return <p>{error}</p>;
-    if (!team) return <p>You are not in a team yet.</p>;
+    if (loading) return (
+        <Box display="flex" justifyContent="center" alignItems="center" height="60vh">
+            <CircularProgress />
+        </Box>
+    );
+
+    if (error) return <Typography color="error" align="center">{error}</Typography>;
+
+    if (!team) return <Typography align="center">You are not in a team yet.</Typography>;
 
     return (
-        <div style={{ padding: "2rem" }}>
-            <h2>My Team</h2>
-            <p><strong>ID:</strong> {team.id}</p>
-            <p><strong>Name:</strong> {team.name}</p>
+        <Container maxWidth="sm" sx={{ mt: 4 }}>
+            <Paper elevation={3} sx={{ p: 4 }}>
+                <Typography variant="h4" gutterBottom>
+                    My Team
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom>
+                    <strong>Team ID:</strong> {team.id}
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom>
+                    <strong>Team Name:</strong> {team.name}
+                </Typography>
 
-            {team.Users && (
-                <>
-                    <h3>Team Members:</h3>
-                    <ul>
-                        {team.Users.map(user => (
-                            <li key={user.id}>
-                                {user.firstName} {user.lastName} ({user.email})
-                            </li>
-                        ))}
-                    </ul>
-                </>
-            )}
-        </div>
+                {team.Users && team.Users.length > 0 && (
+                    <Box mt={4}>
+                        <Typography variant="h6" gutterBottom>
+                            Members
+                        </Typography>
+                        <List>
+                            {team.Users.map(user => (
+                                <React.Fragment key={user.id}>
+                                    <ListItem>
+                                        <ListItemAvatar>
+                                            <Avatar>
+                                                {user.firstName[0]}
+                                            </Avatar>
+                                        </ListItemAvatar>
+                                        <ListItemText
+                                            primary={`${user.firstName} ${user.lastName}`}
+                                            secondary={user.email}
+                                        />
+                                    </ListItem>
+                                    <Divider component="li" />
+                                </React.Fragment>
+                            ))}
+                        </List>
+                    </Box>
+                )}
+            </Paper>
+        </Container>
     );
 }
