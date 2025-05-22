@@ -25,7 +25,11 @@ export default function CallPage() {
     const pcRef = useRef(null);
 
     const cleanup = useCallback(async () => {
-        try { await leaveCall(callId); } catch { }
+        try {
+            await leaveCall(callId);
+        } catch (err) {
+            console.error("Leave failed:", err?.response?.data || err.message);
+        }
         const pc = pcRef.current;
         if (pc) {
             pc.getSenders().forEach(s => s.track?.stop());
@@ -40,7 +44,12 @@ export default function CallPage() {
     useEffect(() => {
         let mounted = true;
         async function start() {
-            await joinCall(callId);
+            try {
+                await joinCall(callId);
+            } catch (err) {
+                console.error("Join failed:", err?.response?.data || err.message);
+            }
+
             const pc = new RTCPeerConnection({
                 iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
             });
