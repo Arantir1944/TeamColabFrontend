@@ -27,5 +27,5 @@ export const searchUsers = (query) =>
         .then(res => res.data.users);
 
 export const startDirectConversation = (userId) =>
-    axios.post("https://16.170.210.30:5001/api/chat/conversations/direct", { userId }, { headers: authHeaders() })
+    axios.post("https://16.170.210.30:5001/api/chat/conversations/direct", { targetUserId: userId }, { headers: authHeaders() })
         .then(res => res.data.conversation);
