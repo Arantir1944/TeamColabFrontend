@@ -15,7 +15,14 @@ export default function MyTeamPage() {
     const [error, setError] = useState("");
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [form, setForm] = useState({ firstName: "", lastName: "", email: "", role: "" });
+    const [form, setForm] = useState({ firstName: "", lastName: "", email: "", role: "", teamId: "" });
+    const [teams, setTeams] = useState([]);
+
+    useEffect(() => {
+        axios.get("https://16.170.210.30:5001/api/teams", { headers: { Authorization: getToken() } })
+            .then(res => setTeams(res.data.teams))
+            .catch(() => {/* handle error */ });
+    }, []);
 
     const { user } = useContext(AuthContext);
     const isManagerOrTL = user?.role === "Manager" || user?.role === "Team Leader";
@@ -35,7 +42,8 @@ export default function MyTeamPage() {
             firstName: user.firstName,
             lastName: user.lastName,
             email: user.email,
-            role: user.role || ""
+            role: user.role || "",
+            teamId: user.teamId || ""
         });
         setEditModalOpen(true);
     };
@@ -161,6 +169,20 @@ export default function MyTeamPage() {
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
                     />
+                    <TextField
+                        select
+                        label="Team"
+                        fullWidth
+                        margin="dense"
+                        value={form.teamId}
+                        onChange={e => setForm({ ...form, teamId: e.target.value })}
+                    >
+                        {teams.map(t => (
+                            <MenuItem key={t.id} value={t.id}>
+                                {t.name}
+                            </MenuItem>
+                        ))}
+                    </TextField>
                     <TextField
                         label="Role"
                         fullWidth
