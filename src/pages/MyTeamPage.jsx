@@ -21,7 +21,7 @@ import {
     DialogActions,
     TextField,
     Button,
-    MenuItem,        // ← import added
+    MenuItem,
 } from "@mui/material";
 import { Edit, Delete } from "@mui/icons-material";
 
@@ -243,12 +243,19 @@ export default function MyTeamPage() {
                         ))}
                     </TextField>
                     <TextField
+                        select
                         label="Role"
                         fullWidth
                         margin="dense"
                         value={form.role}
                         onChange={(e) => setForm({ ...form, role: e.target.value })}
-                    />
+                    >
+                        {['Manager', 'Team Leader', 'Employee'].map((opt) => (
+                            <MenuItem key={opt} value={opt}>
+                                {opt}
+                            </MenuItem>
+                        ))}
+                    </TextField>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={closeEditModal}>Cancel</Button>
