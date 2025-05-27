@@ -3,47 +3,77 @@ import axios from "axios";
 import { getToken } from "../services/authService";
 import { AuthContext } from "../contexts/AuthContext";
 import {
-    Container, Typography, Paper, Box, CircularProgress, List,
-    ListItem, ListItemAvatar, Avatar, ListItemText, Divider, IconButton, Dialog,
-    DialogTitle, DialogContent, DialogActions, TextField, Button
+    Container,
+    Typography,
+    Paper,
+    Box,
+    CircularProgress,
+    List,
+    ListItem,
+    ListItemAvatar,
+    Avatar,
+    ListItemText,
+    Divider,
+    IconButton,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+    Button,
+    MenuItem,        // ← import added
 } from "@mui/material";
 import { Edit, Delete } from "@mui/icons-material";
 
 export default function MyTeamPage() {
+    const { user } = useContext(AuthContext);
+    const isManagerOrTL =
+        user?.role === "Manager" || user?.role === "Team Leader";
+
     const [team, setTeam] = useState(null);
+    const [teams, setTeams] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [form, setForm] = useState({ firstName: "", lastName: "", email: "", role: "", teamId: "" });
-    const [teams, setTeams] = useState([]);
+    const [form, setForm] = useState({
+        firstName: "",
+        lastName: "",
+        email: "",
+        role: "",
+        teamId: "",
+    });
 
+    // Fetch all teams for the dropdown
     useEffect(() => {
-        axios.get("https://16.170.210.30:5001/api/teams", { headers: { Authorization: getToken() } })
-            .then(res => setTeams(res.data.teams))
-            .catch(() => {/* handle error */ });
+        axios
+            .get("https://16.170.210.30:5001/api/teams", {
+                headers: { Authorization: getToken() },
+            })
+            .then((res) => setTeams(res.data.teams))
+            .catch((err) => console.error("Failed to load teams:", err));
     }, []);
 
-    const { user } = useContext(AuthContext);
-    const isManagerOrTL = user?.role === "Manager" || user?.role === "Team Leader";
-
+    // Fetch current user's team
     useEffect(() => {
-        axios.get("https://16.170.210.30:5001/api/teams/user", {
-            headers: { Authorization: getToken() }
-        })
-            .then(res => setTeam(res.data.team))
+        axios
+            .get("https://16.170.210.30:5001/api/teams/user", {
+                headers: { Authorization: getToken() },
+            })
+            .then((res) => setTeam(res.data.team))
             .catch(() => setError("Could not load your team."))
             .finally(() => setLoading(false));
     }, []);
 
-    const openEditModal = (user) => {
-        setSelectedUser(user);
+    const openEditModal = (member) => {
+        setSelectedUser(member);
         setForm({
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            role: user.role || "",
-            teamId: user.teamId || ""
+            firstName: member.firstName,
+            lastName: member.lastName,
+            email: member.email,
+            role: member.role || "",
+            teamId: member.teamId || "",
         });
         setEditModalOpen(true);
     };
@@ -55,12 +85,13 @@ export default function MyTeamPage() {
 
     const handleDelete = async (id) => {
         try {
-            await axios.delete(`https://16.170.210.30:5001/api/users/${id}`, {
-                headers: { Authorization: getToken() }
-            });
-            setTeam(prev => ({
+            await axios.delete(
+                `https://16.170.210.30:5001/api/users/${id}`,
+                { headers: { Authorization: getToken() } }
+            );
+            setTeam((prev) => ({
                 ...prev,
-                Users: prev.Users.filter(u => u.id !== id)
+                Users: prev.Users.filter((u) => u.id !== id),
             }));
         } catch (err) {
             alert("Failed to delete user.");
@@ -69,14 +100,16 @@ export default function MyTeamPage() {
 
     const handleSave = async () => {
         try {
-            await axios.put(`https://16.170.210.30:5001/api/users/${selectedUser.id}`, form, {
-                headers: { Authorization: getToken() }
-            });
-            setTeam(prev => ({
+            await axios.put(
+                `https://16.170.210.30:5001/api/users/${selectedUser.id}`,
+                form,
+                { headers: { Authorization: getToken() } }
+            );
+            setTeam((prev) => ({
                 ...prev,
-                Users: prev.Users.map(u =>
+                Users: prev.Users.map((u) =>
                     u.id === selectedUser.id ? { ...u, ...form } : u
-                )
+                ),
             }));
             closeEditModal();
         } catch (err) {
@@ -84,15 +117,34 @@ export default function MyTeamPage() {
         }
     };
 
-    if (loading) return (
-        <Box display="flex" justifyContent="center" alignItems="center" height="60vh">
-            <CircularProgress />
-        </Box>
-    );
+    if (loading) {
+        return (
+            <Box
+                display="flex"
+                justifyContent="center"
+                alignItems="center"
+                height="60vh"
+            >
+                <CircularProgress />
+            </Box>
+        );
+    }
 
-    if (error) return <Typography color="error" align="center">{error}</Typography>;
+    if (error) {
+        return (
+            <Typography color="error" align="center">
+                {error}
+            </Typography>
+        );
+    }
 
-    if (!team) return <Typography align="center">You are not in a team yet.</Typography>;
+    if (!team) {
+        return (
+            <Typography align="center">
+                You are not in a team yet.
+            </Typography>
+        );
+    }
 
     return (
         <Container maxWidth="sm" sx={{ mt: 4 }}>
@@ -113,7 +165,7 @@ export default function MyTeamPage() {
                             Members
                         </Typography>
                         <List>
-                            {team.Users.map(member => (
+                            {team.Users.map((member) => (
                                 <React.Fragment key={member.id}>
                                     <ListItem
                                         secondaryAction={
@@ -122,7 +174,9 @@ export default function MyTeamPage() {
                                                     <IconButton onClick={() => openEditModal(member)}>
                                                         <Edit />
                                                     </IconButton>
-                                                    <IconButton onClick={() => handleDelete(member.id)}>
+                                                    <IconButton
+                                                        onClick={() => handleDelete(member.id)}
+                                                    >
                                                         <Delete />
                                                     </IconButton>
                                                 </Box>
@@ -134,7 +188,8 @@ export default function MyTeamPage() {
                                         </ListItemAvatar>
                                         <ListItemText
                                             primary={`${member.firstName} ${member.lastName}`}
-                                            secondary={`${member.email} • ${member.role || "No role"}`}
+                                            secondary={`${member.email} • ${member.role || "No role"
+                                                }`}
                                         />
                                     </ListItem>
                                     <Divider component="li" />
@@ -153,14 +208,18 @@ export default function MyTeamPage() {
                         fullWidth
                         margin="dense"
                         value={form.firstName}
-                        onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                        onChange={(e) =>
+                            setForm({ ...form, firstName: e.target.value })
+                        }
                     />
                     <TextField
                         label="Last Name"
                         fullWidth
                         margin="dense"
                         value={form.lastName}
-                        onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                        onChange={(e) =>
+                            setForm({ ...form, lastName: e.target.value })
+                        }
                     />
                     <TextField
                         label="Email"
@@ -175,9 +234,9 @@ export default function MyTeamPage() {
                         fullWidth
                         margin="dense"
                         value={form.teamId}
-                        onChange={e => setForm({ ...form, teamId: e.target.value })}
+                        onChange={(e) => setForm({ ...form, teamId: e.target.value })}
                     >
-                        {teams.map(t => (
+                        {teams.map((t) => (
                             <MenuItem key={t.id} value={t.id}>
                                 {t.name}
                             </MenuItem>
@@ -193,7 +252,9 @@ export default function MyTeamPage() {
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={closeEditModal}>Cancel</Button>
-                    <Button variant="contained" onClick={handleSave}>Save</Button>
+                    <Button variant="contained" onClick={handleSave}>
+                        Save
+                    </Button>
                 </DialogActions>
             </Dialog>
         </Container>
