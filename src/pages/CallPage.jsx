@@ -1,3 +1,5 @@
+// src/pages/CallPage.jsx
+
 import React, { useEffect, useRef, useContext } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
@@ -13,21 +15,23 @@ import {
 import CallEndIcon from "@mui/icons-material/CallEnd";
 
 export default function CallPage() {
-    const { id: callId } = useParams(); // callId from URL
+    // ─── 1. Grab callId from URL (must match <Route path="/call/:callId" />) ────────────────
+    const { callId } = useParams(); // e.g. "/call/123" → callId === "123"
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useContext(AuthContext);
-    const initiatorId = location.state?.initiatorId; // either a number or undefined
+    // initiatorId is passed via ChatPage when user clicked “OK” on the confirm:
+    const initiatorId = location.state?.initiatorId;
 
     const localRef = useRef(null);
     const remoteRef = useRef(null);
     const pcRef = useRef(null);
 
-    // 1) Clean up on unmount (stop tracks, close RTCPeerConnection, remove socket listeners)
+    // ─── 2. Cleanup on unmount: close RTCPeerConnection, stop tracks, remove socket listeners ──
     useEffect(() => {
         return () => {
             if (pcRef.current) {
-                pcRef.current.getSenders().forEach((s) => s.track?.stop());
+                pcRef.current.getSenders().forEach((sender) => sender.track?.stop());
                 pcRef.current.close();
             }
             socket.off("offer");
@@ -37,21 +41,21 @@ export default function CallPage() {
         };
     }, [callId]);
 
-    // 2) Main WebRTC + join/offer/answer flow
+    // ─── 3. Handle WebRTC offer/answer + ICE + joinCall logic ───────────────────────────────
     useEffect(() => {
-        let mounted = true;
+        let isMounted = true;
 
         async function startPeerConnection() {
-            // A) Create RTCPeerConnection with ICE servers
+            // A) Create the RTCPeerConnection
             const pc = new RTCPeerConnection({
                 iceServers: [
                     { urls: "stun:stun.l.google.com:19302" },
-                    // Add TURN servers here if you have them
+                    // Add any TURN servers here if you have them
                 ],
             });
             pcRef.current = pc;
 
-            // B) Grab local media & add its tracks
+            // B) Grab local media (camera & mic) and add to peer connection
             let localStream;
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({
@@ -59,10 +63,10 @@ export default function CallPage() {
                     audio: true,
                 });
             } catch (err) {
-                console.error("Error getting user media:", err);
+                console.error("Error obtaining user media:", err);
                 return;
             }
-            if (!mounted) {
+            if (!isMounted) {
                 localStream.getTracks().forEach((t) => t.stop());
                 return;
             }
@@ -71,28 +75,29 @@ export default function CallPage() {
                 pc.addTrack(track, localStream);
             });
 
-            // C) When remote track arrives → show it in remote <video>
+            // C) When a remote track arrives, display it in remote <video>
             pc.ontrack = (event) => {
                 remoteRef.current.srcObject = event.streams[0];
             };
 
-            // D) ICE candidate event → emit via socket
+            // D) When an ICE candidate is found, send it over socket
             pc.onicecandidate = ({ candidate }) => {
                 if (candidate) {
                     socket.emit("ice-candidate", { callId, candidate });
                 }
             };
 
-            // E) Listen for “offer” (only answerer should handle this)
+            // E) Listener: “offer” from initiator (only answerers handle this)
             socket.on("offer", async ({ sdp, fromUserId }) => {
+                // Only proceed if fromUserId === initiatorId and I am not the initiator
                 if (fromUserId === initiatorId && user.id !== initiatorId) {
                     try {
                         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-                        const ans = await pc.createAnswer();
-                        await pc.setLocalDescription(ans);
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
                         socket.emit("answer", {
                             callId,
-                            sdp: ans,
+                            sdp: answer,
                             toUserId: initiatorId,
                         });
                     } catch (err) {
@@ -101,7 +106,7 @@ export default function CallPage() {
                 }
             });
 
-            // F) Listen for “answer” (only initiator should handle this)
+            // F) Listener: “answer” from an answerer (only initiator handles this)
             socket.on("answer", async ({ sdp, fromUserId }) => {
                 if (user.id === initiatorId && fromUserId !== initiatorId) {
                     try {
@@ -112,7 +117,7 @@ export default function CallPage() {
                 }
             });
 
-            // G) Listen for ICE candidates from other peer(s)
+            // G) Listener: “ice-candidate” from the other peer
             socket.on("ice-candidate", async ({ candidate, fromUserId }) => {
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -121,22 +126,21 @@ export default function CallPage() {
                 }
             });
 
-            // H) Now: decide if I’m initiator or answerer
+            // H) Decide: Am I the initiator (offerer) or answerer (joiner)?
             if (user.id === initiatorId) {
-                // I am the caller (offerer)
+                // — I started the call, so I create the offer immediately
                 try {
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
-                    socket.emit("offer", {
-                        callId,
-                        sdp: offer,
-                        toUserId: null, // server will broadcast to everyone except initiator
-                    });
+                    // Emit offer to everyone in the "call-<callId>" room
+                    socket.emit("offer", { callId, sdp: offer, toUserId: null });
+                    // Also join the call room myself, so that I get ICE candidates back
+                    socket.emit("joinCallRoom", { callId });
                 } catch (err) {
-                    console.error("Error creating or sending offer:", err);
+                    console.error("Error creating/sending offer:", err);
                 }
             } else {
-                // I did not start the call, so I must JOIN on the server
+                // — I am joining, so I must POST /join on the server
                 try {
                     await joinCall(callId);
                 } catch (err) {
@@ -145,31 +149,46 @@ export default function CallPage() {
                         err.response?.status === 400 &&
                         err.response.data?.message === "You have already joined this call"
                     ) {
-                        // Already a participant; continue waiting for “offer”
+                        // OK, I’m already a participant; proceed
                     } else {
                         console.error("joinCall failed:", err);
                         return;
                     }
                 }
-                // After joinCall, wait for “offer” (handled above)
+                // Once I’ve joined on the server, I also join the "call-<callId>" room
+                socket.emit("joinCallRoom", { callId });
+                // Then wait for “offer” event (handled above)
             }
         }
 
         startPeerConnection();
 
         return () => {
-            mounted = false;
+            isMounted = false;
         };
     }, [callId, user.id, initiatorId]);
 
-    // 3) Hang Up / Leave / End logic
+    // ─── 4. Listen for "callEnded" → navigate back to /chat ────────────────────────────────
+    useEffect(() => {
+        const onCallEnded = ({ callId: endedId }) => {
+            if (endedId === parseInt(callId, 10)) {
+                navigate("/chat");
+            }
+        };
+        socket.on("callEnded", onCallEnded);
+        return () => {
+            socket.off("callEnded", onCallEnded);
+        };
+    }, [callId, navigate]);
+
+    // ─── 5. Hang‐up / Leave / End logic ──────────────────────────────────────────────────────
     const handleHangUp = async () => {
         try {
             if (user.id === initiatorId) {
-                // If I’m the initiator, end the call for everyone
+                // Only initiator calls endCall
                 await endCall(callId);
             } else {
-                // If I’m a joiner/answerer, just leave
+                // Non-initiator calls leaveCall
                 await leaveCall(callId);
             }
         } catch (err) {
