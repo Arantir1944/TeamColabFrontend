@@ -15,19 +15,19 @@ import {
 import CallEndIcon from "@mui/icons-material/CallEnd";
 
 export default function CallPage() {
-    // ─── 1. Grab callId from URL (must match <Route path="/call/:callId" />) ────────────────
+    // ─── 1. Grab callId from URL (must match <Route path="/call/:callId" />) ──────────
     const { callId } = useParams(); // e.g. "/call/123" → callId === "123"
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useContext(AuthContext);
-    // initiatorId is passed via ChatPage when user clicked “OK” on the confirm:
+    // initiatorId was passed via ChatPage: navigate(`/call/${callId}`, { state: { initiatorId } })
     const initiatorId = location.state?.initiatorId;
 
     const localRef = useRef(null);
     const remoteRef = useRef(null);
     const pcRef = useRef(null);
 
-    // ─── 2. Cleanup on unmount: close RTCPeerConnection, stop tracks, remove socket listeners ──
+    // ─── 2. Cleanup on unmount: close peer connection, stop tracks, remove socket listeners ──
     useEffect(() => {
         return () => {
             if (pcRef.current) {
@@ -41,21 +41,18 @@ export default function CallPage() {
         };
     }, [callId]);
 
-    // ─── 3. Handle WebRTC offer/answer + ICE + joinCall logic ───────────────────────────────
+    // ─── 3. Main WebRTC + joinCall + offer/answer/ICE flow ───────────────────────────────
     useEffect(() => {
         let isMounted = true;
 
         async function startPeerConnection() {
-            // A) Create the RTCPeerConnection
+            // A) Create the RTCPeerConnection and ICE servers
             const pc = new RTCPeerConnection({
-                iceServers: [
-                    { urls: "stun:stun.l.google.com:19302" },
-                    // Add any TURN servers here if you have them
-                ],
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
             });
             pcRef.current = pc;
 
-            // B) Grab local media (camera & mic) and add to peer connection
+            // B) Get local media (camera & microphone)
             let localStream;
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({
@@ -70,26 +67,31 @@ export default function CallPage() {
                 localStream.getTracks().forEach((t) => t.stop());
                 return;
             }
+
+            // Attach local tracks to <video> and to PC
             localRef.current.srcObject = localStream;
             localStream.getTracks().forEach((track) => {
                 pc.addTrack(track, localStream);
             });
 
-            // C) When a remote track arrives, display it in remote <video>
+            // C) When a remote track arrives, display it
             pc.ontrack = (event) => {
                 remoteRef.current.srcObject = event.streams[0];
             };
 
-            // D) When an ICE candidate is found, send it over socket
+            // D) When ICE candidate is found, send it to the other peer(s)
             pc.onicecandidate = ({ candidate }) => {
                 if (candidate) {
-                    socket.emit("ice-candidate", { callId, candidate });
+                    socket.emit("ice-candidate", {
+                        callId,
+                        candidate,
+                        fromUserId: user.id,
+                    });
                 }
             };
 
-            // E) Listener: “offer” from initiator (only answerers handle this)
+            // E) Listener: "offer" from initiator (answerer side)
             socket.on("offer", async ({ sdp, fromUserId }) => {
-                // Only proceed if fromUserId === initiatorId and I am not the initiator
                 if (fromUserId === initiatorId && user.id !== initiatorId) {
                     try {
                         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -98,6 +100,7 @@ export default function CallPage() {
                         socket.emit("answer", {
                             callId,
                             sdp: answer,
+                            fromUserId: user.id,
                             toUserId: initiatorId,
                         });
                     } catch (err) {
@@ -106,7 +109,7 @@ export default function CallPage() {
                 }
             });
 
-            // F) Listener: “answer” from an answerer (only initiator handles this)
+            // F) Listener: "answer" from answerer (initiator side)
             socket.on("answer", async ({ sdp, fromUserId }) => {
                 if (user.id === initiatorId && fromUserId !== initiatorId) {
                     try {
@@ -117,7 +120,7 @@ export default function CallPage() {
                 }
             });
 
-            // G) Listener: “ice-candidate” from the other peer
+            // G) Listener: "ice-candidate" from the other peer
             socket.on("ice-candidate", async ({ candidate, fromUserId }) => {
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -128,36 +131,40 @@ export default function CallPage() {
 
             // H) Decide: Am I the initiator (offerer) or answerer (joiner)?
             if (user.id === initiatorId) {
-                // — I started the call, so I create the offer immediately
+                // ─ I am the caller → createOffer immediately
                 try {
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
-                    // Emit offer to everyone in the "call-<callId>" room
-                    socket.emit("offer", { callId, sdp: offer, toUserId: null });
-                    // Also join the call room myself, so that I get ICE candidates back
+                    // 1) Join the call room on the socket so we receive ICE / callEnded
                     socket.emit("joinCallRoom", { callId });
+                    // 2) Broadcast the offer into that room
+                    socket.emit("offer", {
+                        callId,
+                        sdp: offer,
+                        fromUserId: user.id,
+                        toUserId: null, // server will broadcast to all in call-<callId>
+                    });
                 } catch (err) {
                     console.error("Error creating/sending offer:", err);
                 }
             } else {
-                // — I am joining, so I must POST /join on the server
+                // ─ I am a joiner → POST /join on server, then join socket room, then wait for "offer"
                 try {
                     await joinCall(callId);
                 } catch (err) {
-                    // If 400 “already joined,” swallow and continue
                     if (
                         err.response?.status === 400 &&
                         err.response.data?.message === "You have already joined this call"
                     ) {
-                        // OK, I’m already a participant; proceed
+                        console.warn("Already joined; continuing");
                     } else {
                         console.error("joinCall failed:", err);
                         return;
                     }
                 }
-                // Once I’ve joined on the server, I also join the "call-<callId>" room
+                // After joinCall succeeds (or if already joined), join the socket room:
                 socket.emit("joinCallRoom", { callId });
-                // Then wait for “offer” event (handled above)
+                // Now wait for "offer" to arrive (handled above in step E)
             }
         }
 
@@ -168,10 +175,10 @@ export default function CallPage() {
         };
     }, [callId, user.id, initiatorId]);
 
-    // ─── 4. Listen for "callEnded" → navigate back to /chat ────────────────────────────────
+    // ─── 4. Listen for "callEnded" so we can auto-navigate back to /chat ─────────────────
     useEffect(() => {
         const onCallEnded = ({ callId: endedId }) => {
-            if (endedId === parseInt(callId, 10)) {
+            if (parseInt(endedId, 10) === parseInt(callId, 10)) {
                 navigate("/chat");
             }
         };
@@ -181,19 +188,20 @@ export default function CallPage() {
         };
     }, [callId, navigate]);
 
-    // ─── 5. Hang‐up / Leave / End logic ──────────────────────────────────────────────────────
+    // ─── 5. Hang‐up / Leave / End logic ────────────────────────────────────────────────────
     const handleHangUp = async () => {
         try {
             if (user.id === initiatorId) {
-                // Only initiator calls endCall
+                // If I’m the initiator, end the call for everyone
                 await endCall(callId);
             } else {
-                // Non-initiator calls leaveCall
+                // Otherwise, just leave the call as a joiner
                 await leaveCall(callId);
             }
         } catch (err) {
             console.error("Leave/End call failed:", err);
         }
+        // Immediately navigate back to /chat
         navigate("/chat");
     };
 
