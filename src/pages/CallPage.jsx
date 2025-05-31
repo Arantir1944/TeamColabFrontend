@@ -164,6 +164,7 @@ export default function CallPage() {
             } else {
                 try {
                     await joinCall(callId);
+                    socket.emit("joinCallRoom", { callId });
                 } catch (err) {
                     if (
                         err.response?.status === 400 &&
