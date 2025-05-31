@@ -165,14 +165,16 @@ export default function CallPage() {
                 try {
                     await joinCall(callId);
                     socket.emit("joinCallRoom", { callId });
+                    console.log("Successfully joined call");
                 } catch (err) {
                     if (
                         err.response?.status === 400 &&
                         err.response.data?.message === "You have already joined this call"
                     ) {
-                        console.warn("Already joined; continuing");
+                        console.warn("Already joined call. Proceeding...");
+                        socket.emit("joinCallRoom", { callId });
                     } else {
-                        console.error("joinCall failed:", err);
+                        console.error("joinCall failed:", err.response?.data || err.message);
                         return;
                     }
                 }
