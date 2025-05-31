@@ -8,8 +8,17 @@ import { initiateCall } from "../../services/callService";
 export default function CallButton({ conversationId }) {
     const nav = useNavigate();
     const start = async () => {
-        const { call } = await initiateCall({ conversationId });
-        nav(`/call/${call.id}`, { state: { initiatorId: call.initiatorId } });
+        try {
+            const { call } = await initiateCall({ conversationId });
+            nav(`/call/${call.id}`, { state: { initiatorId: call.initiatorId } });
+        } catch (err) {
+            if (err.response?.status === 400 && typeof err.response.data?.callId === 'number'
+            ) {
+                nav(`/call/${err.response.data.callId}`);
+            } else {
+                console.error("Unexpected error creating call:", err);
+            }
+        }
     };
 
     return (
