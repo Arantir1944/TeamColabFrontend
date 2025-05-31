@@ -1,5 +1,4 @@
-// src/pages/CallPage.jsx
-import React, { useEffect, useRef, useContext, useCallback } from "react";
+import React, { useEffect, useRef, useContext } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
 import { joinCall, leaveCall, endCall } from "../services/callService";
@@ -9,123 +8,203 @@ import {
     Grid,
     Paper,
     Button,
-    Typography
+    Typography,
 } from "@mui/material";
 import CallEndIcon from "@mui/icons-material/CallEnd";
 
 export default function CallPage() {
-    const { callId } = useParams();
-    const { user } = useContext(AuthContext);
-    const { state } = useLocation();
-    const initiatorId = state?.initiatorId;
+    const { id: callId } = useParams(); // callId from URL
     const navigate = useNavigate();
+    const location = useLocation();
+    const { user } = useContext(AuthContext);
+    const initiatorId = location.state?.initiatorId; // either a number or undefined
 
     const localRef = useRef(null);
     const remoteRef = useRef(null);
     const pcRef = useRef(null);
 
-    const cleanup = useCallback(async () => {
-        try {
-            await leaveCall(callId);
-        } catch (err) {
-            console.error("Leave failed:", err?.response?.data || err.message);
-        }
-        const pc = pcRef.current;
-        if (pc) {
-            pc.getSenders().forEach(s => s.track?.stop());
-            pc.close();
-        }
-        socket.off("offer");
-        socket.off("answer");
-        socket.off("ice-candidate");
-        socket.off("callEnded");
+    // 1) Clean up on unmount (stop tracks, close RTCPeerConnection, remove socket listeners)
+    useEffect(() => {
+        return () => {
+            if (pcRef.current) {
+                pcRef.current.getSenders().forEach((s) => s.track?.stop());
+                pcRef.current.close();
+            }
+            socket.off("offer");
+            socket.off("answer");
+            socket.off("ice-candidate");
+            socket.off("callEnded");
+        };
     }, [callId]);
 
+    // 2) Main WebRTC + join/offer/answer flow
     useEffect(() => {
         let mounted = true;
-        async function start() {
-            try {
-                await joinCall(callId);
-            } catch (err) {
-                console.error("Join failed:", err?.response?.data || err.message);
-            }
 
+        async function startPeerConnection() {
+            // A) Create RTCPeerConnection with ICE servers
             const pc = new RTCPeerConnection({
-                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                iceServers: [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    // Add TURN servers here if you have them
+                ],
             });
             pcRef.current = pc;
 
-            const localStream = await navigator.mediaDevices.getUserMedia({
-                video: true, audio: true
-            });
+            // B) Grab local media & add its tracks
+            let localStream;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true,
+                });
+            } catch (err) {
+                console.error("Error getting user media:", err);
+                return;
+            }
             if (!mounted) {
-                localStream.getTracks().forEach(t => t.stop());
+                localStream.getTracks().forEach((t) => t.stop());
                 return;
             }
             localRef.current.srcObject = localStream;
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            localStream.getTracks().forEach((track) => {
+                pc.addTrack(track, localStream);
+            });
 
-            pc.ontrack = e => { remoteRef.current.srcObject = e.streams[0]; };
-            pc.onicecandidate = ({ candidate }) => {
-                if (candidate) socket.emit("ice-candidate", { callId, candidate });
+            // C) When remote track arrives → show it in remote <video>
+            pc.ontrack = (event) => {
+                remoteRef.current.srcObject = event.streams[0];
             };
 
-            socket.on("offer", async ({ sdp }) => {
-                await pc.setRemoteDescription(sdp);
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit("answer", { callId, sdp: answer });
-            });
-            socket.on("answer", async ({ sdp }) => await pc.setRemoteDescription(sdp));
-            socket.on("ice-candidate", async ({ candidate }) => await pc.addIceCandidate(candidate));
+            // D) ICE candidate event → emit via socket
+            pc.onicecandidate = ({ candidate }) => {
+                if (candidate) {
+                    socket.emit("ice-candidate", { callId, candidate });
+                }
+            };
 
+            // E) Listen for “offer” (only answerer should handle this)
+            socket.on("offer", async ({ sdp, fromUserId }) => {
+                if (fromUserId === initiatorId && user.id !== initiatorId) {
+                    try {
+                        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                        const ans = await pc.createAnswer();
+                        await pc.setLocalDescription(ans);
+                        socket.emit("answer", {
+                            callId,
+                            sdp: ans,
+                            toUserId: initiatorId,
+                        });
+                    } catch (err) {
+                        console.error("Error handling offer:", err);
+                    }
+                }
+            });
+
+            // F) Listen for “answer” (only initiator should handle this)
+            socket.on("answer", async ({ sdp, fromUserId }) => {
+                if (user.id === initiatorId && fromUserId !== initiatorId) {
+                    try {
+                        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                    } catch (err) {
+                        console.error("Error handling answer:", err);
+                    }
+                }
+            });
+
+            // G) Listen for ICE candidates from other peer(s)
+            socket.on("ice-candidate", async ({ candidate, fromUserId }) => {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (err) {
+                    console.error("Error adding ICE candidate:", err);
+                }
+            });
+
+            // H) Now: decide if I’m initiator or answerer
             if (user.id === initiatorId) {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit("offer", { callId, sdp: offer });
+                // I am the caller (offerer)
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit("offer", {
+                        callId,
+                        sdp: offer,
+                        toUserId: null, // server will broadcast to everyone except initiator
+                    });
+                } catch (err) {
+                    console.error("Error creating or sending offer:", err);
+                }
+            } else {
+                // I did not start the call, so I must JOIN on the server
+                try {
+                    await joinCall(callId);
+                } catch (err) {
+                    // If 400 “already joined,” swallow and continue
+                    if (
+                        err.response?.status === 400 &&
+                        err.response.data?.message === "You have already joined this call"
+                    ) {
+                        // Already a participant; continue waiting for “offer”
+                    } else {
+                        console.error("joinCall failed:", err);
+                        return;
+                    }
+                }
+                // After joinCall, wait for “offer” (handled above)
             }
-
-            socket.on("callEnded", () => {
-                cleanup();
-                navigate("/chat", { replace: true });
-            });
         }
 
-        start();
+        startPeerConnection();
+
         return () => {
             mounted = false;
-            cleanup();
         };
-    }, [callId, initiatorId, user.id, navigate, cleanup]);
+    }, [callId, user.id, initiatorId]);
 
+    // 3) Hang Up / Leave / End logic
     const handleHangUp = async () => {
-        try { await endCall(callId); } catch { }
-        cleanup();
-        navigate("/chat", { replace: true });
+        try {
+            if (user.id === initiatorId) {
+                // If I’m the initiator, end the call for everyone
+                await endCall(callId);
+            } else {
+                // If I’m a joiner/answerer, just leave
+                await leaveCall(callId);
+            }
+        } catch (err) {
+            console.error("Leave/End call failed:", err);
+        }
+        navigate("/chat");
     };
 
     return (
-        <Box p={2}>
-            <Typography variant="h5" align="center" gutterBottom>
-                Video Call
+        <Box p={2} height="100vh">
+            <Typography variant="h5" gutterBottom>
+                Call Room: {callId}
             </Typography>
-            <Grid container spacing={2} justifyContent="center">
-                <Grid item>
+            <Grid container spacing={2}>
+                <Grid item xs={6}>
                     <Paper elevation={3}>
                         <video
                             ref={localRef}
-                            autoPlay muted
-                            style={{ width: 200, height: 150, backgroundColor: "#000" }}
+                            autoPlay
+                            muted
+                            playsInline
+                            style={{ width: "100%" }}
                         />
+                        <Typography align="center">Your Video</Typography>
                     </Paper>
                 </Grid>
-                <Grid item>
+                <Grid item xs={6}>
                     <Paper elevation={3}>
                         <video
                             ref={remoteRef}
                             autoPlay
-                            style={{ width: 400, height: 300, backgroundColor: "#000" }}
+                            playsInline
+                            style={{ width: "100%" }}
                         />
+                        <Typography align="center">Remote Video</Typography>
                     </Paper>
                 </Grid>
             </Grid>

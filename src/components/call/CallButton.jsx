@@ -1,4 +1,3 @@
-// src/components/call/CallButton.jsx
 import React from "react";
 import { Button } from "@mui/material";
 import CallIcon from "@mui/icons-material/Call";
@@ -7,16 +6,23 @@ import { initiateCall } from "../../services/callService";
 
 export default function CallButton({ conversationId }) {
     const nav = useNavigate();
+
     const start = async () => {
         try {
+            // Try to create a new call
             const { call } = await initiateCall({ conversationId });
+            // If successful, navigate into that call as the initiator
             nav(`/call/${call.id}`, { state: { initiatorId: call.initiatorId } });
         } catch (err) {
-            if (err.response?.status === 400 && typeof err.response.data?.callId === 'number'
+            // If the server responded 400 with a callId, join the existing call instead
+            if (
+                err.response?.status === 400 &&
+                typeof err.response.data?.callId === "number"
             ) {
-                nav(`/call/${err.response.data.callId}`);
+                const existingCallId = err.response.data.callId;
+                nav(`/call/${existingCallId}`);
             } else {
-                console.error("Unexpected error creating call:", err);
+                console.error("Unexpected error initiating call:", err);
             }
         }
     };
